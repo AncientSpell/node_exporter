@@ -34,6 +34,7 @@ import (
 const (
 	defIgnoredMountPoints = "^/(dev|proc|sys|var/lib/docker/.+)($|/)"
 	defIgnoredFSTypes     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+	devDiskPrefix         = "/dev/"
 )
 
 var mountTimeout = kingpin.Flag("collector.filesystem.mount-timeout",
@@ -49,6 +50,7 @@ func (c *filesystemCollector) GetStats() ([]filesystemStats, error) {
 		return nil, err
 	}
 	stats := []filesystemStats{}
+	devDisk := make(map[string]bool)
 	for _, labels := range mps {
 		if c.ignoredMountPointsPattern.MatchString(labels.mountPoint) {
 			level.Debug(c.logger).Log("msg", "Ignoring mount point", "mountpoint", labels.mountPoint)
@@ -57,6 +59,11 @@ func (c *filesystemCollector) GetStats() ([]filesystemStats, error) {
 		if c.ignoredFSTypesPattern.MatchString(labels.fsType) {
 			level.Debug(c.logger).Log("msg", "Ignoring fs", "type", labels.fsType)
 			continue
+		}
+		if _, ok := devDisk[labels.device]; ok {
+			continue
+		} else if strings.HasPrefix(labels.device, devDiskPrefix) {
+			devDisk[labels.device] = true
 		}
 		stuckMountsMtx.Lock()
 		if _, ok := stuckMounts[labels.mountPoint]; ok {
